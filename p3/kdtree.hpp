@@ -1,8 +1,8 @@
-#include <tuple>
-#include <vector>
 #include <algorithm>
 #include <cassert>
 #include <stdexcept>
+#include <tuple>
+#include <vector>
 
 /**
  * An abstract template base of the KDTree class
@@ -28,18 +28,23 @@ public:
     typedef std::pair<const Key, Value> Data;
     static inline constexpr size_t KeySize = std::tuple_size<Key>::value;
     static_assert(KeySize > 0, "Can not construct KDTree with zero dimension");
+
 protected:
     struct Node {
         Data data;
-        Node *parent;
-        Node *left = nullptr;
-        Node *right = nullptr;
+        Node* parent;
+        Node* left = nullptr;
+        Node* right = nullptr;
 
-        Node(const Key &key, const Value &value, Node *parent) : data(key, value), parent(parent) {}
+        Node(const Key& key, const Value& value, Node* parent): data(key, value), parent(parent) {}
 
-        const Key &key() { return data.first; }
+        const Key& key() {
+            return data.first;
+        }
 
-        Value &value() { return data.second; }
+        Value& value() {
+            return data.second;
+        }
     };
 
 public:
@@ -49,17 +54,29 @@ public:
      */
     class Iterator {
     private:
-        KDTree *tree;
-        Node *node;
+        KDTree* tree;
+        Node* node;
 
-        Iterator(KDTree *tree, Node *node) : tree(tree), node(node) {}
+        Iterator(KDTree* tree, Node* node): tree(tree), node(node) {}
 
         /**
          * Increment the iterator
          * Time complexity: O(log n)
          */
         void increment() {
-            // TODO: implement this function
+            if (!node) {
+                return;
+            }
+            if (node->right) {
+                node = tree->findMin<0>(node->right);
+                return;
+            }
+            auto temp = node->parent;
+            while (temp && node == temp->right) {
+                node = temp;
+                temp = temp->parent;
+            }
+            node = temp;
         }
 
         /**
@@ -67,7 +84,19 @@ public:
          * Time complexity: O(log n)
          */
         void decrement() {
-            // TODO: implement this function
+            if (!node) {
+                return;
+            }
+            if (node->left) {
+                node = tree->findMax<0>(node->left);
+                return;
+            }
+            auto temp = node->parent;
+            while (temp && node == temp->left) {
+                node = temp;
+                temp = temp->parent;
+            }
+            node = temp;
         }
 
     public:
@@ -75,11 +104,11 @@ public:
 
         Iterator() = delete;
 
-        Iterator(const Iterator &) = default;
+        Iterator(const Iterator&) = default;
 
-        Iterator &operator=(const Iterator &) = default;
+        Iterator& operator=(const Iterator&) = default;
 
-        Iterator &operator++() {
+        Iterator& operator++() {
             increment();
             return *this;
         }
@@ -90,7 +119,7 @@ public:
             return temp;
         }
 
-        Iterator &operator--() {
+        Iterator& operator--() {
             decrement();
             return *this;
         }
@@ -101,26 +130,26 @@ public:
             return temp;
         }
 
-        bool operator==(const Iterator &that) const {
+        bool operator==(const Iterator& that) const {
             return node == that.node;
         }
 
-        bool operator!=(const Iterator &that) const {
+        bool operator!=(const Iterator& that) const {
             return node != that.node;
         }
 
-        Data *operator->() {
+        Data* operator->() {
             return &(node->data);
         }
 
-        Data &operator*() {
+        Data& operator*() {
             return node->data;
         }
     };
 
-protected:                      // DO NOT USE private HERE!
-    Node *root = nullptr;       // root of the tree
-    size_t treeSize = 0;        // size of the tree
+protected: // DO NOT USE private HERE!
+    Node* root = nullptr; // root of the tree
+    size_t treeSize = 0; // size of the tree
 
     /**
      * Find the node with key
@@ -131,7 +160,7 @@ protected:                      // DO NOT USE private HERE!
      * @return the node with key, or nullptr if not found
      */
     template<size_t DIM>
-    Node *find(const Key &key, Node *node) {
+    Node* find(const Key& key, Node* node) {
         constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
         // TODO: implement this function
     }
@@ -147,9 +176,16 @@ protected:                      // DO NOT USE private HERE!
      * @return whether insertion took place (return false if the key already exists)
      */
     template<size_t DIM>
-    bool insert(const Key &key, const Value &value, Node *&node, Node *parent) {
+    bool insert(const Key& key, const Value& value, Node*& node, Node* parent) {
         constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
-        // TODO: implement this function
+        if (!node) {
+            node = new Node(key, value, parent);
+            ++treeSize;
+            return true;
+        }
+        if (key == node->key()) {
+            return false;
+        }
     }
 
     /**
@@ -163,8 +199,8 @@ protected:                      // DO NOT USE private HERE!
      * @return relationship of two keys on a dimension with the compare function
      */
     template<size_t DIM, typename Compare>
-    static bool compareKey(const Key &a, const Key &b, Compare compare = Compare()) {
-        if (std::get<DIM>(a) != std::get<DIM>(b)){
+    static bool compareKey(const Key& a, const Key& b, Compare compare = Compare()) {
+        if (std::get<DIM>(a) != std::get<DIM>(b)) {
             return compare(std::get<DIM>(a), std::get<DIM>(b));
         }
         return compare(a, b);
@@ -181,9 +217,11 @@ protected:                      // DO NOT USE private HERE!
      * @return the minimum / maximum of two nodes
      */
     template<size_t DIM, typename Compare>
-    static Node *compareNode(Node *a, Node *b, Compare compare = Compare()) {
-        if (!a) return b;
-        if (!b) return a;
+    static Node* compareNode(Node* a, Node* b, Compare compare = Compare()) {
+        if (!a)
+            return b;
+        if (!b)
+            return a;
         return compareKey<DIM, Compare>(a->key(), b->key(), compare) ? a : b;
     }
 
@@ -196,7 +234,7 @@ protected:                      // DO NOT USE private HERE!
      * @return the minimum node on a dimension
      */
     template<size_t DIM_CMP, size_t DIM>
-    Node *findMin(Node *node) {
+    Node* findMin(Node* node) {
         constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
         // TODO: implement this function
     }
@@ -210,28 +248,30 @@ protected:                      // DO NOT USE private HERE!
      * @return the maximum node on a dimension
      */
     template<size_t DIM_CMP, size_t DIM>
-    Node *findMax(Node *node) {
+    Node* findMax(Node* node) {
         constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
         // TODO: implement this function
     }
 
     template<size_t DIM>
-    Node *findMinDynamic(size_t dim) {
+    Node* findMinDynamic(size_t dim) {
         constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
         if (dim >= KeySize) {
             dim %= KeySize;
         }
-        if (dim == DIM) return findMin<DIM, 0>(root);
+        if (dim == DIM)
+            return findMin<DIM, 0>(root);
         return findMinDynamic<DIM_NEXT>(dim);
     }
 
     template<size_t DIM>
-    Node *findMaxDynamic(size_t dim) {
+    Node* findMaxDynamic(size_t dim) {
         constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
         if (dim >= KeySize) {
             dim %= KeySize;
         }
-        if (dim == DIM) return findMax<DIM, 0>(root);
+        if (dim == DIM)
+            return findMax<DIM, 0>(root);
         return findMaxDynamic<DIM_NEXT>(dim);
     }
 
@@ -244,18 +284,19 @@ protected:                      // DO NOT USE private HERE!
      * @return nullptr if node is erased, else the (probably) replaced node
      */
     template<size_t DIM>
-    Node *erase(Node *node, const Key &key) {
+    Node* erase(Node* node, const Key& key) {
         constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
         // TODO: implement this function
     }
 
     template<size_t DIM>
-    Node *eraseDynamic(Node *node, size_t dim) {
+    Node* eraseDynamic(Node* node, size_t dim) {
         constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
         if (dim >= KeySize) {
             dim %= KeySize;
         }
-        if (dim == DIM) return erase<DIM>(node, node->key());
+        if (dim == DIM)
+            return erase<DIM>(node, node->key());
         return eraseDynamic<DIM_NEXT>(node, dim);
     }
 
@@ -275,14 +316,14 @@ public:
     /**
      * Time complexity: O(n)
      */
-    KDTree(const KDTree &that) {
+    KDTree(const KDTree& that) {
         // TODO: implement this function
     }
 
     /**
      * Time complexity: O(n)
      */
-    KDTree &operator=(const KDTree &that) {
+    KDTree& operator=(const KDTree& that) {
         // TODO: implement this function
     }
 
@@ -294,9 +335,11 @@ public:
     }
 
     Iterator begin() {
-        if (!root) return end();
+        if (!root)
+            return end();
         auto node = root;
-        while (node->left) node = node->left;
+        while (node->left)
+            node = node->left;
         return Iterator(this, node);
     }
 
@@ -304,11 +347,11 @@ public:
         return Iterator(this, nullptr);
     }
 
-    Iterator find(const Key &key) {
+    Iterator find(const Key& key) {
         return Iterator(this, find<0>(key, root));
     }
 
-    void insert(const Key &key, const Value &value) {
+    void insert(const Key& key, const Value& value) {
         insert<0>(key, value, root, nullptr);
     }
 
@@ -330,14 +373,15 @@ public:
         return Iterator(this, findMaxDynamic<0>(dim));
     }
 
-    bool erase(const Key &key) {
+    bool erase(const Key& key) {
         auto prevSize = treeSize;
         erase<0>(root, key);
         return prevSize > treeSize;
     }
 
     Iterator erase(Iterator it) {
-        if (it == end()) return it;
+        if (it == end())
+            return it;
         auto node = it.node;
         if (!it.node->left && !it.node->right) {
             it.node = it.node->parent;
@@ -352,5 +396,7 @@ public:
         return it;
     }
 
-    size_t size() const { return treeSize; }
+    size_t size() const {
+        return treeSize;
+    }
 };
