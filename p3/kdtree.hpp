@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cassert>
+#include <cstddef>
 #include <stdexcept>
 #include <tuple>
 #include <vector>
@@ -68,7 +69,10 @@ public:
                 return;
             }
             if (node->right) {
-                node = tree->findMin<0>(node->right);
+                node = node->right;
+                while (node->left) {
+                    node = node->left;
+                }
                 return;
             }
             auto temp = node->parent;
@@ -88,7 +92,10 @@ public:
                 return;
             }
             if (node->left) {
-                node = tree->findMax<0>(node->left);
+                node = node->left;
+                while (node->right) {
+                    node = node->right;
+                }
                 return;
             }
             auto temp = node->parent;
@@ -162,7 +169,17 @@ protected: // DO NOT USE private HERE!
     template<size_t DIM>
     Node* find(const Key& key, Node* node) {
         constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
-        // TODO: implement this function
+        if (!node) {
+            return nullptr;
+        }
+        if (key == node->key()) {
+            return node;
+        }
+        if (compareKey<DIM>(key, node->key())) {
+            return find<DIM_NEXT>(key, node->left);
+        } else {
+            return find<DIM_NEXT>(key, node->right);
+        }
     }
 
     /**
@@ -184,7 +201,13 @@ protected: // DO NOT USE private HERE!
             return true;
         }
         if (key == node->key()) {
+            node->value() = value;
             return false;
+        }
+        if (compareKey<DIM>(key, node->key(), std::less<>())) {
+            return insert<DIM_NEXT>(key, value, node->left, node);
+        } else {
+            return insert<DIM_NEXT>(key, value, node->right, node);
         }
     }
 
@@ -236,7 +259,18 @@ protected: // DO NOT USE private HERE!
     template<size_t DIM_CMP, size_t DIM>
     Node* findMin(Node* node) {
         constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
-        // TODO: implement this function
+        if (!node) {
+            return nullptr;
+        }
+        Node* min = findMin<DIM_CMP, DIM_NEXT>(node->left);
+        if (DIM != DIM_CMP) {
+            min = compareNode<DIM_CMP>(
+                min,
+                findMin<DIM_CMP, DIM_NEXT>(node->right),
+                std::less<std::tuple_element_t<DIM_CMP, Key>>()
+            );
+        }
+        return compareNode<DIM_CMP>(min, node, std::less<std::tuple_element_t<DIM_CMP, Key>>());
     }
 
     /**
@@ -250,7 +284,18 @@ protected: // DO NOT USE private HERE!
     template<size_t DIM_CMP, size_t DIM>
     Node* findMax(Node* node) {
         constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
-        // TODO: implement this function
+        if (!node) {
+            return nullptr;
+        }
+        Node* max = findMax<DIM_CMP, DIM_NEXT>(node->right);
+        if (DIM != DIM_CMP) {
+            max = compareNode<DIM_CMP>(
+                max,
+                findMax<DIM_CMP, DIM_NEXT>(node->left),
+                std::greater<std::tuple_element_t<DIM_CMP, Key>>()
+            );
+        }
+        return compareNode<DIM_CMP>(max, node, std::greater<std::tuple_element_t<DIM_CMP, Key>>());
     }
 
     template<size_t DIM>
@@ -286,7 +331,42 @@ protected: // DO NOT USE private HERE!
     template<size_t DIM>
     Node* erase(Node* node, const Key& key) {
         constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
-        // TODO: implement this function
+        if (!node) {
+            return nullptr;
+        }
+        if (key == node->key()) {
+            if (!node->left && !node->right) {
+                if (node->parent) {
+                    if (node->parent->left == node) {
+                        node->parent->left = nullptr;
+                    } else {
+                        node->parent->right = nullptr;
+                    }
+                } else {
+                    root = nullptr;
+                }
+                delete node;
+                --treeSize;
+                return nullptr;
+            } else if (node->right) {
+                Node* min = findMin<DIM_NEXT, 0>(node->right);
+                Key& key = const_cast<Key&>(node->key());
+                key = min->key();
+                node->value() = min->value();
+                node->right = erase<DIM_NEXT>(node->right, min->key());
+            } else {
+                Node* max = findMax<DIM_NEXT, 0>(node->left);
+                Key& key = const_cast<Key&>(node->key());
+                key = max->key();
+                node->value() = max->value();
+                node->left = erase<DIM_NEXT>(node->left, max->key());
+            }
+        } else if (compareKey<DIM>(key, node->key())) {
+            node->left = erase<DIM_NEXT>(node->left, key);
+        } else {
+            node->right = erase<DIM_NEXT>(node->right, key);
+        }
+        return node;
     }
 
     template<size_t DIM>
@@ -301,6 +381,43 @@ protected: // DO NOT USE private HERE!
     }
 
     // TODO: define your helper functions here if necessary
+    template<size_t DIM>
+    Node* kdtree_build(std::vector<std::pair<Key, Value>> v, Node* parent) {
+        constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
+        if (v.empty()) {
+            return nullptr;
+        }
+        std::stable_sort(v.begin(), v.end(), compareKey<DIM>);
+        Node* node = new Node(v[v.size() / 2].first, v[v.size() / 2].second, parent);
+        node->left = kdtree_build<DIM_NEXT>(
+            std::vector<std::pair<Key, Value>>(v.begin(), v.begin() + v.size() / 2),
+            node
+        );
+        node->right = kdtree_build<DIM_NEXT>(
+            std::vector<std::pair<Key, Value>>(v.begin() + v.size() / 2 + 1, v.end()),
+            node
+        );
+        return node;
+    }
+
+    Node* kdtree_copy(Node* node, Node* parent) {
+        if (!node) {
+            return nullptr;
+        }
+        Node* newNode = new Node(node->key(), node->value(), parent);
+        newNode->left = kdtree_copy(node->left, newNode);
+        newNode->right = kdtree_copy(node->right, newNode);
+        return newNode;
+    }
+
+    void clear(Node* node) {
+        if (!node) {
+            return;
+        }
+        clear(node->left);
+        clear(node->right);
+        delete node;
+    }
 
 public:
     KDTree() = default;
@@ -310,28 +427,36 @@ public:
      * @param v we pass by value here because v need to be modified
      */
     explicit KDTree(std::vector<std::pair<Key, Value>> v) {
-        // TODO: implement this function
+        root = kdtree_build<0>(v, nullptr);
+        treeSize = v.size();
     }
 
     /**
      * Time complexity: O(n)
      */
     KDTree(const KDTree& that) {
-        // TODO: implement this function
+        root = kdtree_copy(that.root, nullptr);
+        treeSize = that.treeSize;
     }
 
     /**
      * Time complexity: O(n)
      */
     KDTree& operator=(const KDTree& that) {
-        // TODO: implement this function
+        if (this == &that) {
+            return *this;
+        }
+        clear(root);
+        root = kdtree_copy(that.root, nullptr);
+        treeSize = that.treeSize;
+        return *this;
     }
 
     /**
      * Time complexity: O(n)
      */
     ~KDTree() {
-        // TODO: implement this function
+        clear(root);
     }
 
     Iterator begin() {
