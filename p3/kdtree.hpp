@@ -175,7 +175,7 @@ protected: // DO NOT USE private HERE!
         if (key == node->key()) {
             return node;
         }
-        if (compareKey<DIM>(key, node->key())) {
+        if (my_compareKey<DIM, std::less<>>(key, node->key())) {
             return find<DIM_NEXT>(key, node->left);
         } else {
             return find<DIM_NEXT>(key, node->right);
@@ -204,7 +204,7 @@ protected: // DO NOT USE private HERE!
             node->value() = value;
             return false;
         }
-        if (compareKey<DIM>(key, node->key(), std::less<>())) {
+        if (my_compareKey<DIM, std::less<>>(key, node->key())) {
             return insert<DIM_NEXT>(key, value, node->left, node);
         } else {
             return insert<DIM_NEXT>(key, value, node->right, node);
@@ -264,13 +264,9 @@ protected: // DO NOT USE private HERE!
         }
         Node* min = findMin<DIM_CMP, DIM_NEXT>(node->left);
         if (DIM != DIM_CMP) {
-            min = compareNode<DIM_CMP>(
-                min,
-                findMin<DIM_CMP, DIM_NEXT>(node->right),
-                std::less<std::tuple_element_t<DIM_CMP, Key>>()
-            );
+            min = compareNode<DIM_CMP, std::less<>>(min, findMin<DIM_CMP, DIM_NEXT>(node->right));
         }
-        return compareNode<DIM_CMP>(min, node, std::less<std::tuple_element_t<DIM_CMP, Key>>());
+        return compareNode<DIM_CMP, std::less<>>(min, node);
     }
 
     /**
@@ -289,13 +285,9 @@ protected: // DO NOT USE private HERE!
         }
         Node* max = findMax<DIM_CMP, DIM_NEXT>(node->right);
         if (DIM != DIM_CMP) {
-            max = compareNode<DIM_CMP>(
-                max,
-                findMax<DIM_CMP, DIM_NEXT>(node->left),
-                std::greater<std::tuple_element_t<DIM_CMP, Key>>()
-            );
+            max = compareNode<DIM_CMP, std::greater<>>(max, findMax<DIM_CMP, DIM_NEXT>(node->left));
         }
-        return compareNode<DIM_CMP>(max, node, std::greater<std::tuple_element_t<DIM_CMP, Key>>());
+        return compareNode<DIM_CMP, std::greater<>>(max, node);
     }
 
     template<size_t DIM>
@@ -349,19 +341,19 @@ protected: // DO NOT USE private HERE!
                 --treeSize;
                 return nullptr;
             } else if (node->right) {
-                Node* min = findMin<DIM_NEXT, 0>(node->right);
-                Key& key = const_cast<Key&>(node->key());
-                key = min->key();
+                Node* min = findMin<DIM, DIM_NEXT>(node->right);
+                Key& temp_key = const_cast<Key&>(node->key());
+                temp_key = min->key();
                 node->value() = min->value();
                 node->right = erase<DIM_NEXT>(node->right, min->key());
             } else {
-                Node* max = findMax<DIM_NEXT, 0>(node->left);
-                Key& key = const_cast<Key&>(node->key());
-                key = max->key();
+                Node* max = findMax<DIM, DIM_NEXT>(node->left);
+                Key& temp_key = const_cast<Key&>(node->key());
+                temp_key = max->key();
                 node->value() = max->value();
                 node->left = erase<DIM_NEXT>(node->left, max->key());
             }
-        } else if (compareKey<DIM>(key, node->key())) {
+        } else if (my_compareKey<DIM, std::less<>>(key, node->key())) {
             node->left = erase<DIM_NEXT>(node->left, key);
         } else {
             node->right = erase<DIM_NEXT>(node->right, key);
@@ -382,12 +374,17 @@ protected: // DO NOT USE private HERE!
 
     // TODO: define your helper functions here if necessary
     template<size_t DIM>
+    static bool compareData(const Data& a, const Data& b) {
+        return compareKey<DIM, std::less<>>(a.first, b.first);
+    }
+
+    template<size_t DIM>
     Node* kdtree_build(std::vector<std::pair<Key, Value>> v, Node* parent) {
         constexpr size_t DIM_NEXT = (DIM + 1) % KeySize;
         if (v.empty()) {
             return nullptr;
         }
-        std::stable_sort(v.begin(), v.end(), compareKey<DIM>);
+        std::stable_sort(v.begin(), v.end(), compareData<DIM>);
         Node* node = new Node(v[v.size() / 2].first, v[v.size() / 2].second, parent);
         node->left = kdtree_build<DIM_NEXT>(
             std::vector<std::pair<Key, Value>>(v.begin(), v.begin() + v.size() / 2),
@@ -419,6 +416,11 @@ protected: // DO NOT USE private HERE!
         delete node;
     }
 
+    template<size_t DIM, typename Compare>
+    static bool my_compareKey(const Key& a, const Key& b, Compare compare = Compare()) {
+        return compare(std::get<DIM>(a), std::get<DIM>(b));
+    }
+
 public:
     KDTree() = default;
 
@@ -427,6 +429,11 @@ public:
      * @param v we pass by value here because v need to be modified
      */
     explicit KDTree(std::vector<std::pair<Key, Value>> v) {
+        std::stable_sort(v.begin(), v.end(), compareData<0>);
+        auto it = std::unique(v.rbegin(), v.rend(), [](const Data& a, const Data& b) {
+            return a.first == b.first;
+        });
+        v.assign(it.base(), v.end());
         root = kdtree_build<0>(v, nullptr);
         treeSize = v.size();
     }
